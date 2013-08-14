@@ -6,6 +6,10 @@ require_once __DIR__.'/Tinkerforge/BrickletAmbientLight.php';
 require_once __DIR__.'/Tinkerforge/BrickletHumidity.php';
 require_once __DIR__.'/Tinkerforge/BrickletBarometer.php';
 
+require_once __DIR__.'/DataStore.php';
+require_once __DIR__.'/LinesDisplay.php';
+require_once __DIR__.'/AltitudeDisplay.php';
+
 use Tinkerforge\IPConnection;
 use Tinkerforge\BrickletLCD20x4;
 use Tinkerforge\BrickletAmbientLight;
@@ -42,10 +46,13 @@ class WeatherStation
      */
     protected $brickletBarometer;
 
-    protected $displayOff = false;
+    protected $dataStore;
+    protected $displays;
+    protected $currentDisplay = 0;
 
     public function __construct()
     {
+        $this->dataStore = new DataStore();
         $this->ipcon = new IPConnection();
         while(true) {
             try {
@@ -98,7 +105,8 @@ class WeatherStation
                     $this->brickletLCD->clearDisplay();
                     $this->brickletLCD->backlightOn();
                     $this->brickletLCD->registerCallback(BrickletLCD20x4::CALLBACK_BUTTON_PRESSED, array($this, 'onButtonPressed'));
-                    $this->brickletLCD->registerCallback(BrickletLCD20x4::CALLBACK_BUTTON_RELEASED, array($this, 'onButtonReleased'));
+                    $this->displays[] = new LinesDisplay($this->brickletLCD, $this->dataStore);
+                    $this->displays[] = new AltitudeDisplay($this->brickletLCD, $this->dataStore);
                     echo "LCD 20x4 initialized\n";
                 } catch(Exception $e) {
                     $this->brickletLCD = null;
@@ -142,30 +150,27 @@ class WeatherStation
 
     public function onIlluminance($illuminance)
     {
-        if ($this->brickletLCD !== null && !$this->displayOff) {
-            $text = sprintf("Illuminance   %3d lx", $illuminance/10.0);
-            $this->brickletLCD->writeLine(0, 0, $text);
+        $this->dataStore->setIlluminance($illuminance/10.0);
+        if (isset($this->displays[$this->currentDisplay])) {
+            $this->displays[$this->currentDisplay]->update();
         }
     }
 
     public function onHumidity($humidity)
     {
-        if ($this->brickletLCD !== null && !$this->displayOff) {
-            $text = sprintf("Humidity      %3d %%", $humidity/10.0);
-            $this->brickletLCD->writeLine(1, 0, $text);
+        $this->dataStore->setHumidity($humidity/10.0);
+        if (isset($this->displays[$this->currentDisplay])) {
+            $this->displays[$this->currentDisplay]->update();
         }
     }
 
     public function onAirPressure($airPressure)
     {
-        if ($this->brickletLCD !== null && !$this->displayOff) {
-            $text = sprintf("Air Press    %4d mb", $airPressure/1000.0);
-            $this->brickletLCD->writeLine(2, 0, $text);
-
-            $temperature = $this->brickletBarometer->getChipTemperature();
-            // 0xDF == ° on LCD 20x4 charset
-            $text = sprintf("Temperature  %4.1f %cC", $temperature/100.0, 0xDF);
-            $this->brickletLCD->writeLine(3, 0, $text);
+        $this->dataStore->setAirPressure($airPressure/1000.0);
+        $temperature = $this->brickletBarometer->getChipTemperature();
+        $this->dataStore->setTemperature($temperature/100.0);
+        if (isset($this->displays[$this->currentDisplay])) {
+            $this->displays[$this->currentDisplay]->update();
         }
     }
 
@@ -178,17 +183,14 @@ class WeatherStation
                 $this->brickletLCD->backlightOn();
             }
         } elseif ($buttonId === 1) {
-            $this->displayOff = true;
+            $this->currentDisplay++;
+            $this->currentDisplay %= count($this->displays);
             $altitude = $this->brickletBarometer->getAltitude();
-            $this->brickletLCD->clearDisplay();
-            $this->brickletLCD->writeLine(0, 0, sprintf('Altitude      %4d m', $altitude/100.0));
-        }
-    }
-
-    public function onButtonReleased($buttonId)
-    {
-        if ($buttonId === 1) {
-            $this->displayOff = false;
+            $this->dataStore->setAltitude($altitude/100.0);
+            if (isset($this->displays[$this->currentDisplay])) {
+                $this->displays[$this->currentDisplay]->clear();
+                $this->displays[$this->currentDisplay]->update();
+            }
         }
     }
     

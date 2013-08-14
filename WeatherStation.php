@@ -42,6 +42,8 @@ class WeatherStation
      */
     protected $brickletBarometer;
 
+    protected $displayOff = false;
+
     public function __construct()
     {
         $this->ipcon = new IPConnection();
@@ -96,6 +98,7 @@ class WeatherStation
                     $this->brickletLCD->clearDisplay();
                     $this->brickletLCD->backlightOn();
                     $this->brickletLCD->registerCallback(BrickletLCD20x4::CALLBACK_BUTTON_PRESSED, array($this, 'onButtonPressed'));
+                    $this->brickletLCD->registerCallback(BrickletLCD20x4::CALLBACK_BUTTON_RELEASED, array($this, 'onButtonReleased'));
                     echo "LCD 20x4 initialized\n";
                 } catch(Exception $e) {
                     $this->brickletLCD = null;
@@ -139,24 +142,24 @@ class WeatherStation
 
     public function onIlluminance($illuminance)
     {
-        if ($this->brickletLCD !== null) {
-            $text = sprintf("Illuminance %5.1f lx", $illuminance/10.0);
+        if ($this->brickletLCD !== null && !$this->displayOff) {
+            $text = sprintf("Illuminance   %3d lx", $illuminance/10.0);
             $this->brickletLCD->writeLine(0, 0, $text);
         }
     }
 
     public function onHumidity($humidity)
     {
-        if ($this->brickletLCD !== null) {
-            $text = sprintf("Humidity    %5.1f %%", $humidity/10.0);
+        if ($this->brickletLCD !== null && !$this->displayOff) {
+            $text = sprintf("Humidity      %3d %%", $humidity/10.0);
             $this->brickletLCD->writeLine(1, 0, $text);
         }
     }
 
     public function onAirPressure($airPressure)
     {
-        if ($this->brickletLCD !== null) {
-            $text = sprintf("Air Press  %6.1f mb", $airPressure/1000.0);
+        if ($this->brickletLCD !== null && !$this->displayOff) {
+            $text = sprintf("Air Press    %4d mb", $airPressure/1000.0);
             $this->brickletLCD->writeLine(2, 0, $text);
 
             $temperature = $this->brickletBarometer->getChipTemperature();
@@ -174,6 +177,18 @@ class WeatherStation
             } else {
                 $this->brickletLCD->backlightOn();
             }
+        } elseif ($buttonId === 1) {
+            $this->displayOff = true;
+            $altitude = $this->brickletBarometer->getAltitude();
+            $this->brickletLCD->clearDisplay();
+            $this->brickletLCD->writeLine(0, 0, sprintf('Altitude      %4d m', $altitude/100.0));
+        }
+    }
+
+    public function onButtonReleased($buttonId)
+    {
+        if ($buttonId === 1) {
+            $this->displayOff = false;
         }
     }
     

@@ -7,8 +7,10 @@ require_once __DIR__.'/Tinkerforge/BrickletHumidity.php';
 require_once __DIR__.'/Tinkerforge/BrickletBarometer.php';
 
 require_once __DIR__.'/DataStore.php';
+require_once __DIR__.'/HistoryDataStore.php';
 require_once __DIR__.'/LinesDisplay.php';
 require_once __DIR__.'/AltitudeDisplay.php';
+require_once __DIR__.'/HistoryDisplay.php';
 
 use Tinkerforge\IPConnection;
 use Tinkerforge\BrickletLCD20x4;
@@ -52,7 +54,7 @@ class WeatherStation
 
     public function __construct()
     {
-        $this->dataStore = new DataStore();
+        $this->dataStore = new HistoryDataStore();
         $this->ipcon = new IPConnection();
         while(true) {
             try {
@@ -107,6 +109,7 @@ class WeatherStation
                     $this->brickletLCD->registerCallback(BrickletLCD20x4::CALLBACK_BUTTON_PRESSED, array($this, 'onButtonPressed'));
                     $this->displays[] = new LinesDisplay($this->brickletLCD, $this->dataStore);
                     $this->displays[] = new AltitudeDisplay($this->brickletLCD, $this->dataStore);
+                    $this->displays[] = new HistoryDisplay($this->brickletLCD, $this->dataStore);
                     echo "LCD 20x4 initialized\n";
                 } catch(Exception $e) {
                     $this->brickletLCD = null;
@@ -190,6 +193,14 @@ class WeatherStation
             if (isset($this->displays[$this->currentDisplay])) {
                 $this->displays[$this->currentDisplay]->clear();
                 $this->displays[$this->currentDisplay]->update();
+            }
+        } elseif ($buttonId === 2) {
+            if (method_exists($this->displays[$this->currentDisplay], 'onButton2')) {
+                $this->displays[$this->currentDisplay]->onButton2();
+            }
+        } elseif ($buttonId === 3) {
+            if (method_exists($this->displays[$this->currentDisplay], 'onButton3')) {
+                $this->displays[$this->currentDisplay]->onButton3();
             }
         }
     }
